@@ -97,7 +97,7 @@ const LiveChat = () => {
       const response = await axios.get(`http://localhost:9090/erd/chatHistory?erdNo=${erdNo}`);
       const chatHistory = response.data;
   
-      // 가져온 채팅 기록에서 내 메시지인지 판별
+      // 내 메세지 판별
       const processedMessages = chatHistory.map((msg) => ({
         ...msg,
         isUser: msg.userId === userId,
@@ -134,7 +134,7 @@ const LiveChat = () => {
             userId: incomingMessage.userId, 
             content: incomingMessage.content, 
             isUser: false, 
-            chatTime: incomingMessage.chatTime || new Date().toISOString(), // chatTime이 없으면 현재 시간 사용
+            chatTime: incomingMessage.chatTime || new Date().toISOString(), 
           },
         ]);
       }

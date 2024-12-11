@@ -99,9 +99,7 @@ const Header = () => {
   const user = useSelector(state => state.user);
   const dispatch = useDispatch();
   
-  console.log("유저: " + JSON.stringify(user, null, 2));
   const handleLogout = async () => {
-    console.log("로그아웃 시도 유저 : " + user.user.userId);
     if (user) {
       try {
         await axios.post("http://localhost:9090/member/logout", { userId: user.user.userId }, {

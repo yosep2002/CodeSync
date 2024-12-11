@@ -255,8 +255,6 @@ const Main = () => {
         muserNo: user.user.userNo || ''
       }));
 
-      console.log("로그인된 유저 데이터: " + JSON.stringify(user, null, 2));
-
       fetchProjects();
 
       const fetchAllUsers = async () => {

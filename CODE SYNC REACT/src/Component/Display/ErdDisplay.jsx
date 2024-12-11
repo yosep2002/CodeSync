@@ -27,6 +27,7 @@ const ErdDisplay = () => {
 
   // 테이블 추가
   const addTable = useCallback((position) => {
+    console.log("hi");
     setTables((prevTables) => [
       ...prevTables,
       {
