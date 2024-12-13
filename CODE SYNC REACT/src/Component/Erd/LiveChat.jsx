@@ -120,7 +120,7 @@ const LiveChat = () => {
     setSocket(socket);
 
     socket.onopen = () => {
-      console.log('Connected to WebSocket server');
+      console.log('Connected to LiveChatWebSocket server');
     };
 
     socket.onmessage = (event) => {
@@ -141,7 +141,7 @@ const LiveChat = () => {
     };
 
     socket.onclose = () => {
-      console.log('Disconnected from WebSocket server');
+      console.log('Disconnected from LiveChat WebSocket server');
     };
 
     return () => {

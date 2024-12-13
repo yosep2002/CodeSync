@@ -1,4 +1,5 @@
-import React, { useState, useCallback, } from "react";
+import React, { useState, useCallback, useEffect, } from "react";
+import { useLocation, useParams } from 'react-router-dom';
 import Toolbar from "../Erd/Toolbar";
 import Canvas from "../Erd/Canvas";
 import Table from "../Erd/Table";
@@ -10,6 +11,7 @@ import styled from "styled-components";
 import LiveChat from "../Erd/LiveChat";
 import History from "../Erd/History";
 import '../../Erd.css';
+import axios from "axios";
 
 const ErdDisplay = () => {
   const [tables, setTables] = useState([]);
@@ -24,20 +26,226 @@ const ErdDisplay = () => {
 
   const openModal = (modalType) => setActiveModal(modalType);
   const closeModal = () => setActiveModal(null);
+  const { erdNo } = useParams();
+  const [socket, setSocket] = useState(null);  // WebSocket 연결 상태
+  const [userId, setUserId] = useState(null);
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const userNo = queryParams.get('userNo');
 
-  // 테이블 추가
-  const addTable = useCallback((position) => {
-    console.log("hi");
-    setTables((prevTables) => [
-      ...prevTables,
-      {
-        id: `table-${prevTables.length + 1}`,
-        name: "Undefined",
-        position,
-        fields: [],
-      },
-    ]);
+  // 사용자 ID를 가져오는 함수
+  async function getUserId() {
+    try {
+      const response = await axios.get(`http://localhost:9090/erd/userId?userNo=${userNo}`);
+      const userId = response.data.userId;
+      setUserId(userId);
+    } catch (error) {
+      console.error('Error fetching userId:', error);
+    }
+  }
+
+  // 테이블 정보 가져오기
+  const fetchTables = useCallback(async () => {
+    try {
+      const response = await axios.get(`http://localhost:9090/erd/tables?erdNo=${erdNo}`);
+      if (response.data && Array.isArray(response.data)) {
+        const transformedTables = response.data.map((item) => ({
+          id: item.id || "null",
+          erdTableNo: item.erdtableNo,
+          name: item.tableName || "Untitled",
+          position: {
+            x: parseFloat(item.xaxis) || 0,
+            y: parseFloat(item.yaxis) || 0,
+          },
+          fields: item.fields || [],
+        }));
+
+        setTables(transformedTables);
+      }
+    } catch (error) {
+      console.error('Error fetching tables:', error);
+      setTables([]);
+    }
+  }, [erdNo]);
+
+  const fetchMemos = useCallback(async () => {
+    try {
+      const response = await axios.get(`http://localhost:9090/erd/memos?erdNo=${erdNo}`);
+      if (response.data && Array.isArray(response.data)) {
+        const transformedMemos = response.data.map((item) => ({
+          id: item.id || "null",
+          memoNo: item.memoNo,
+          title: item.memoTitle || "Untitled",
+          content: item.content,
+          position: {
+            x: parseFloat(item.xaxis) || 0,
+            y: parseFloat(item.yaxis) || 0,
+          },
+        }));
+        setMemos(transformedMemos);
+      }
+    } catch (error) {
+      console.error('Error fetching tables:', error);
+      setMemos([]);
+    }
+  }, [erdNo])
+
+  useEffect(() => {
+    fetchTables();
+    fetchMemos();
   }, []);
+
+  useEffect(() => {
+    if (!userId || !erdNo) return;
+
+    const socket = new WebSocket('ws://localhost:9090/displayserver.do?erdNo=' + erdNo);
+    setSocket(socket);
+
+    socket.onopen = () => {
+      console.log('Connected to Display WebSocket server');
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        switch (message.code) {
+          case "2": // 테이블 생성
+            setTables((prevTables) => [
+              ...prevTables,
+              {
+                id: message.id,
+                name: message.tableName,
+                position: {
+                  x: parseFloat(message.xaxis),
+                  y: parseFloat(message.yaxis),
+                },
+                fields: [],
+              },
+            ]);
+            break;
+
+          case "3": // 테이 블 삭제
+            setTables((prevTables) =>
+              prevTables.filter((table) => table.id !== message.id)
+            );
+            setArrows((prevArrows) =>
+              prevArrows.filter(
+                (arrow) => arrow.startId !== message.id && arrow.endId !== message.id
+              )
+            );
+            break;
+
+          case "4": // 테이블 위치 업데이트
+            setTables((prevTables) => 
+              prevTables.map((table) =>
+                table.id === message.id
+                  ? {
+                    ...table,
+                    position: {
+                      x: parseFloat(message.xaxis),
+                      y: parseFloat(message.yaxis),
+                    },
+                  }
+                  : table
+              )
+            );
+            break;
+
+          case "5": // 메모 추가
+            setMemos((prevMemos) => [
+              ...prevMemos,
+              {
+                id: message.id,
+                position: {
+                  x: parseFloat(message.xaxis),
+                  y: parseFloat(message.yaxis),
+                },
+                title: message.memoTitle,
+                text: message.content || "",
+              },
+            ]);   
+            break;
+
+          case "6": // 메모 삭제
+            setMemos((prevMemos) =>
+              prevMemos.filter((memo) => memo.id !== message.id)
+            );
+            break;
+
+          case "7": // 메모 업데이트
+            setMemos((prevMemos) =>
+              prevMemos.map((memo) =>
+                memo.id === message.id
+                  ? {
+                    ...memo,
+                    title: message.memoTitle,
+                    text: message.content || "",
+                  }
+                  : memo
+              )
+            );
+            break;
+
+          case "8": // 메모 위치 업데이트
+            console.log(message);
+            setMemos((prevMemos) =>
+              prevMemos.map((memo) =>
+                memo.id === message.id
+                  ? {
+                    ...memo,
+                    position: {
+                      x: parseFloat(message.xaxis),
+                      y: parseFloat(message.yaxis),
+                    },
+                  }
+                  : memo
+              )
+            );
+            break;
+
+          default:
+            console.warn(`Unhandled WebSocket message code: ${message.code}`);
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+
+    socket.onclose = () => {
+      console.log('Disconnected from Display WebSocket server');
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, [erdNo, userId]);
+
+  // 테이블 추가 함수
+  const addTable = useCallback((position) => {
+    const newTable = {
+      id: `table-${tables.length + 1}`,
+      name: "Untitled",
+      position,
+      fields: [],
+    };
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const tableMessage = {
+        code: "2",
+        erdNo: erdNo,
+        userNo: userNo,
+        tableName: newTable.name,
+        xaxis: newTable.position.x,
+        yaxis: newTable.position.y,
+        id: newTable.id,
+
+      };
+      socket.send(JSON.stringify(tableMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+  }, [erdNo, socket, tables, userNo]);
 
   // 테이블 업데이트
   const updateTable = useCallback((id, updatedTable) => {
@@ -48,59 +256,106 @@ const ErdDisplay = () => {
 
   // 테이블 삭제
   const deleteTable = useCallback((id) => {
-    setTables((prevTables) => prevTables.filter((table) => table.id !== id));
     setArrows((prevArrows) =>
       prevArrows.filter((arrow) => arrow.startId !== id && arrow.endId !== id)
     );
-  }, []);
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const tableMessage = {
+        code: "3",
+        erdNo: erdNo,
+        id: id
+      };
+      socket.send(JSON.stringify(tableMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+
+  }, [erdNo, socket]);
 
   // 테이블 복사
   const copyTable = useCallback((table) => {
-    setTables((prevTables) => [
-      ...prevTables,
-      {
-        ...table,
-        id: `table-${prevTables.length + 1}`,
-        name: `Copy of ${table.name}`,
-        position: {
-          x: table.position.x,
-          y: table.position.y + 100,
-        },
-      },
-    ]);
-  }, []);
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const tableMessage = {
+        code: "2",
+        erdNo: erdNo,
+        userNo: userNo,
+        tableName: table.name,
+        xaxis: table.position.x,
+        yaxis: table.position.y + 100,
+        id: `copy of ` + table.id,
+      };
+      socket.send(JSON.stringify(tableMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+
+  }, [erdNo, socket, tables, userNo]);
 
   // 메모 추가
   const addMemo = useCallback((position) => {
-    setMemos((prevMemos) => [
-      ...prevMemos,
-      {
-        id: `memo-${prevMemos.length + 1}`,
-        position,
-        text: "",
-      },
-    ]);
-  }, []);
+    const newMemo = {
+      id: `memo-${memos.length + 1}`,
+      position,
+      title: "Untitled",
+      text: "",
+    };
 
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const tableMessage = {
+        code: "5",
+        erdNo: erdNo,
+        memoTitle: newMemo.title,
+        xaxis: newMemo.position.x,
+        yaxis: newMemo.position.y,
+        id: newMemo.id,
+        content: newMemo.text || null
+
+      };
+      socket.send(JSON.stringify(tableMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+
+  }, [erdNo, socket, memos, userNo]);
+
+  // 메모 삭제
   const deleteMemo = useCallback((id) => {
-    setMemos((prevMemos) => prevMemos.filter((memo) => memo.id !== id));
-  }, []);
 
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const memoMessage = {
+        code: "6",
+        erdNo: erdNo,
+        id: id
+      };
+      socket.send(JSON.stringify(memoMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+
+  }, [erdNo, socket]);
+
+  // 메모 업데이트 
   const updateMemo = useCallback((id, updatedMemo) => {
-    setMemos((prevMemos) =>
-      prevMemos.map((memo) =>
-        memo.id === id ? { ...memo, ...updatedMemo } : memo
-      )
-    );
-  }, []);
 
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const memoMessage = {
+        code: "7",
+        erdNo: erdNo,
+        memoTitle: updatedMemo.title,
+        id: id,
+        content: updatedMemo.text || null
 
+      };
+      socket.send(JSON.stringify(memoMessage));
+    }
+
+  }, [erdNo, socket]);
+
+  // 테이블 위치 변경
   const updateTablePosition = useCallback((id, newPosition) => {
-    setTables((prevTables) =>
-      prevTables.map((table) =>
-        table.id === id ? { ...table, position: newPosition } : table
-      )
-    );
 
     // 화살표의 시작/끝이 이 테이블과 연결되어 있으면 화살표 위치도 업데이트
     setArrows((prevArrows) =>
@@ -114,16 +369,39 @@ const ErdDisplay = () => {
         return arrow;
       })
     );
-  }, []);
 
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const tableMessage = {
+        code: "4",
+        erdNo: erdNo,
+        xaxis: newPosition.x,
+        yaxis: newPosition.y,
+        id: id
+      };
+      socket.send(JSON.stringify(tableMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
 
+  }, [erdNo, socket]);
+
+  // 메모 위치 변경
   const updateMemoPosition = useCallback((id, newPosition) => {
-    setMemos((prevMemos) =>
-      prevMemos.map((memo) =>
-        memo.id === id ? { ...memo, position: newPosition } : memo
-      )
-    );
-  }, []);
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const memoMessage = {
+        code: "8",
+        erdNo: erdNo,
+        xaxis: newPosition.x,
+        yaxis: newPosition.y,
+        id: id
+      };
+      socket.send(JSON.stringify(memoMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+
+  }, [erdNo, socket]);
 
 
   // 화살표 추가 모드 활성화 및 테이블 클릭 처리
@@ -221,6 +499,10 @@ const ErdDisplay = () => {
     }
   };
 
+  useEffect(() => {
+    getUserId();
+  }, [userNo]);
+
   return (
     <div className="app-container">
       <div className="content">
@@ -232,13 +514,13 @@ const ErdDisplay = () => {
         <Canvas
           tables={tables}
           arrows={arrows}
-          viewport={viewport} // 뷰포트 상태 전달
+          viewport={viewport} 
           startDrag={startDrag}
           stopDrag={stopDrag}
           onDrag={onDrag}
           setIsDragging={setIsDragging}
         >
-          {tables.map((table) => (
+          {Array.isArray(tables) && tables.map((table) => (
             <Table
               key={table.id}
               table={table}
@@ -249,7 +531,7 @@ const ErdDisplay = () => {
               handleTableClick={handleTableClick}
             />
           ))}
-          {memos.map((memo) => (
+          {Array.isArray(memos) && memos.map((memo) => (
             <Memo
               key={memo.id}
               memo={memo}
@@ -281,7 +563,7 @@ const ErdDisplay = () => {
             <CloseButton onClick={closeModal}>×</CloseButton>
           </PanelHeader>
           <PanelContent>
-            <LiveChat/>
+            <LiveChat />
           </PanelContent>
         </SidePanel>
         <SidePanel open={activeModal === "history"}>
@@ -290,7 +572,7 @@ const ErdDisplay = () => {
             <CloseButton onClick={closeModal}>×</CloseButton>
           </PanelHeader>
           <PanelContent>
-            <History/>
+            <History />
           </PanelContent>
         </SidePanel>
         <Modal isOpen={activeModal === "share"} onClose={closeModal} title="Share">

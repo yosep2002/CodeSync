@@ -2,36 +2,49 @@ import React, { useState, useRef, useEffect } from "react";
 import Draggable from "react-draggable";
 import styled from "styled-components";
 
-const Memo = ({ memo, updateMemoPosition, updateMemo, deleteMemo, }) => {
-    const [text, setText] = useState(memo.text);
-    const [title, setTitle] = useState(memo.title || "Untitled");
-    const [isEditingTitle, setIsEditingTitle] = useState(false); // 제목 편집 상태
+const Memo = ({ memo, updateMemoPosition, updateMemo, deleteMemo }) => {
+    const [text, setText] = useState(memo.content);
+    const [title, setTitle] = useState(memo.title);
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
 
     const memoRef = useRef(null);
     const contentRef = useRef(null);
 
-    // 제목 저장 및 편집 상태 종료
+    // 제목 수정 후, 상태 업데이트
     const handleTitleBlur = (e) => {
-        setTitle(e.target.value || "Untitled");
-        setIsEditingTitle(false); // 편집 모드 종료
+        const newTitle = e.target.value || "Untitled";
+        setTitle(newTitle);
+        if (newTitle !== memo.memoTitle) {
+            updateMemo(memo.id, { text, title: newTitle }); 
+        }
+        setIsEditingTitle(false); 
     };
 
     // 제목을 클릭하면 편집 모드로 변경
     const handleTitleClick = () => {
-        setIsEditingTitle(true);
+        setIsEditingTitle(true); // 제목 편집 모드 활성화
+    };
+
+    // 제목 수정 중에 상태 업데이트
+    const handleTitleChange = (e) => {
+        setTitle(e.target.value);
     };
 
     // 내용이 수정된 후, 커서가 다른 곳으로 이동하면 상태 업데이트
     const handleTextBlur = () => {
-        setText(contentRef.current.innerText);
+        const newText = contentRef.current.innerText;
+        setText(newText);
+        if (newText !== memo.content) {
+            updateMemo(memo.id, { text: newText, title });
+        }
     };
 
     // 상태가 변경되면 updateMemo 호출
     useEffect(() => {
-        if (memo.text !== text || memo.title !== title) {
+        if (memo.content !== text || memo.memoTitle !== title) {
             updateMemo(memo.id, { text, title });
         }
-    }, [text, title, memo.id, memo.text, memo.title, updateMemo]);
+    }, [text, title, memo.id, memo.content, memo.memoTitle, updateMemo]);
 
     // 메모 삭제 기능
     const handleDeleteMemo = (e) => {
@@ -42,7 +55,7 @@ const Memo = ({ memo, updateMemoPosition, updateMemo, deleteMemo, }) => {
     return (
         <Draggable
             nodeRef={memoRef}
-            defaultPosition={memo.position}
+            position={memo.position}
             onStop={(e, data) => {
                 updateMemoPosition(memo.id, { x: data.x, y: data.y });
             }}
@@ -51,8 +64,9 @@ const Memo = ({ memo, updateMemoPosition, updateMemo, deleteMemo, }) => {
                 {isEditingTitle ? (
                     <TitleInput
                         type="text"
-                        defaultValue={title}
-                        onBlur={handleTitleBlur} // 포커스 해제 시 저장
+                        value={title} 
+                        onBlur={handleTitleBlur} 
+                        onChange={handleTitleChange} 
                         autoFocus
                     />
                 ) : (
@@ -75,7 +89,7 @@ const Memo = ({ memo, updateMemoPosition, updateMemo, deleteMemo, }) => {
 export default Memo;
 
 const MemoText = styled.div`
-    position: absolute; /* 위치를 절대적으로 설정 */
+    position: absolute;
     padding: 15px;
     background-color: #ffeb99;
     border: 1px solid #ffd700;

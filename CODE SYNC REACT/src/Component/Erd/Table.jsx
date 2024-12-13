@@ -6,18 +6,18 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
   const tableRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(table.name);
-  const [editingField, setEditingField] = useState(null); // 수정 중인 필드
-  const [editingFieldIndex, setEditingFieldIndex] = useState(null); // 수정 중인 필드의 인덱스
+  const [editingField, setEditingField] = useState(null); 
+  const [editingFieldIndex, setEditingFieldIndex] = useState(null); 
 
   const handleTitleChange = () => setIsEditingTitle(true);
 
   const handleTitleSave = () => {
-    updateTable(table.id, { ...table, name: title }); // 부모 상태 업데이트
+    updateTable(table.id, { ...table, name: title }); 
     setIsEditingTitle(false);
   };
 
   const handleFieldEdit = (fieldType, index) => {
-    setEditingField(fieldType); // 수정 중인 필드를 지정
+    setEditingField(fieldType); 
     setEditingFieldIndex(index); // 수정 중인 필드의 인덱스 지정
   };
 
@@ -62,7 +62,7 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
   return (
     <Draggable
       nodeRef={tableRef}
-      defaultPosition={table.position}
+      position={table.position}
       onStop={(e, data) => updatePosition(table.id, { x: data.x, y: data.y })}
     >
       <TableWrapper ref={tableRef} onClick={() => handleTableClick(table.id)} className="table">
