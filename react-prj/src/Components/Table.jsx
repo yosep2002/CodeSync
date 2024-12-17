@@ -171,7 +171,7 @@ export default Table;
 const TableWrapper = styled.div`
 
   position: absolute;
-  width: 250px; /* 크기 줄임 */
+  width: 300px; /* 크기 줄임 */
   background-color: #f9f9f9;
   border: 1px solid #ccc;
   padding: 10px; /* padding 줄임 */
@@ -202,14 +202,14 @@ const TableTitleWrapper = styled.div`
 `;
 
 const Title = styled.h4`
-  font-size: 10px; /* 글자 크기 줄임 */
+  font-size: 13px; /* 글자 크기 줄임 */
   font-weight: 600;
   margin: 0;
   cursor: pointer;
 `;
 
 const TitleInput = styled.input`
-  font-size: 10px; /* 글자 크기 줄임 */
+  font-size: 13px; /* 글자 크기 줄임 */
   padding: 4px; /* padding 줄임 */
   border: 1px solid #ccc;
   border-radius: 5px;
@@ -223,7 +223,7 @@ const TableActions = styled.div`
 
 const Button = styled.button`
   padding: 4px 8px; /* padding 줄임 */
-  font-size: 8px; /* 글자 크기 줄임 */
+  font-size: 10px; /* 글자 크기 줄임 */
   background-color: #007bff;
   color: white;
   border: none;
@@ -242,7 +242,7 @@ const TableFields = styled.table`
   width: 100%;
   border-collapse: collapse;
   margin: 10px 0; /* margin 더 줄임 */
-  font-size: 8px; /* 글자 크기 더 줄임 */
+  font-size: 12px; /* 글자 크기 더 줄임 */
   text-align: center;
   th,
   td {
@@ -283,7 +283,7 @@ const TableFields = styled.table`
 const FieldInput = styled.input`
   width: 80%;
   padding: 5px;
-  font-size: 9px;
+  font-size: 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
 `;

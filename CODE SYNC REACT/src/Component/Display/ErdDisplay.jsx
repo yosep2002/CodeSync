@@ -12,6 +12,7 @@ import LiveChat from "../Erd/LiveChat";
 import History from "../Erd/History";
 import '../../Erd.css';
 import axios from "axios";
+import { v4 as uuidv4 } from 'uuid';
 
 const ErdDisplay = () => {
   const [tables, setTables] = useState([]);
@@ -90,9 +91,35 @@ const ErdDisplay = () => {
     }
   }, [erdNo])
 
+  const fetchArrows = useCallback(async () => {
+    try {
+      const response = await axios.get(`http://localhost:9090/erd/arrows?erdNo=${erdNo}`);
+      
+      if (response.data && Array.isArray(response.data)) {
+        const transformedArrows = response.data.map((item) => ({
+          startId: item.startId,
+          endId: item.endId,
+          startPosition: {
+            x: parseFloat(item.startXaxis), 
+            y: parseFloat(item.startYaxis),
+          },
+          endPosition: {
+            x: parseFloat(item.endXaxis), 
+            y: parseFloat(item.endYaxis), 
+          },
+        }));
+        setArrows(transformedArrows);
+      }
+    } catch (error) {
+      console.error('Error fetching arrows:', error);
+      setArrows([]); 
+    }
+  }, [erdNo]);
+
   useEffect(() => {
     fetchTables();
     fetchMemos();
+    fetchArrows();
   }, []);
 
   useEffect(() => {
@@ -137,7 +164,7 @@ const ErdDisplay = () => {
             break;
 
           case "4": // 테이블 위치 업데이트
-            setTables((prevTables) => 
+            setTables((prevTables) =>
               prevTables.map((table) =>
                 table.id === message.id
                   ? {
@@ -161,10 +188,9 @@ const ErdDisplay = () => {
                   x: parseFloat(message.xaxis),
                   y: parseFloat(message.yaxis),
                 },
-                title: message.memoTitle,
-                text: message.content || "",
+                content: message.content || "",
               },
-            ]);   
+            ]);
             break;
 
           case "6": // 메모 삭제
@@ -179,8 +205,7 @@ const ErdDisplay = () => {
                 memo.id === message.id
                   ? {
                     ...memo,
-                    title: message.memoTitle,
-                    text: message.content || "",
+                    content: message.content || "",
                   }
                   : memo
               )
@@ -188,7 +213,6 @@ const ErdDisplay = () => {
             break;
 
           case "8": // 메모 위치 업데이트
-            console.log(message);
             setMemos((prevMemos) =>
               prevMemos.map((memo) =>
                 memo.id === message.id
@@ -202,6 +226,24 @@ const ErdDisplay = () => {
                   : memo
               )
             );
+            break;
+
+          case "9": // 화살표 추가
+            setArrows((prevArrows) => [
+              ...prevArrows,
+              {
+                startPosition: {
+                  x: parseFloat(message.startXaxis),
+                  y: parseFloat(message.startYaxis),
+                },
+                endPosition: {
+                  x: parseFloat(message.endXaxis),
+                  y: parseFloat(message.endYaxis),
+                },
+                startId: message.startId, 
+                endId: message.endId, 
+              },
+            ]);
             break;
 
           default:
@@ -224,7 +266,7 @@ const ErdDisplay = () => {
   // 테이블 추가 함수
   const addTable = useCallback((position) => {
     const newTable = {
-      id: `table-${tables.length + 1}`,
+      id: uuidv4(),
       name: "Untitled",
       position,
       fields: [],
@@ -252,13 +294,23 @@ const ErdDisplay = () => {
     setTables((prevTables) =>
       prevTables.map((table) => (table.id === id ? updatedTable : table))
     );
-  }, []);
+  
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const updateMessage = {
+        code: "11", 
+        erdNo: erdNo,
+        userNo: userNo,
+        tableName: updatedTable.name,
+        fields: updatedTable.fields, 
+      };
+      socket.send(JSON.stringify(updateMessage));
+    } else {
+      console.error('WebSocket is not open');
+    }
+  }, [erdNo, socket, userNo]);
 
   // 테이블 삭제
   const deleteTable = useCallback((id) => {
-    setArrows((prevArrows) =>
-      prevArrows.filter((arrow) => arrow.startId !== id && arrow.endId !== id)
-    );
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       const tableMessage = {
@@ -271,6 +323,26 @@ const ErdDisplay = () => {
       console.error('WebSocket is not open');
     }
 
+    setArrows((prevArrows) => {
+      const remainingArrows = prevArrows.filter(
+        (arrow) => arrow.startId !== id && arrow.endId !== id
+      );
+  
+      prevArrows.forEach((arrow) => {
+        if (arrow.startId === id || arrow.endId === id) {
+          const arrowMessage = {
+            code: "10",         
+            erdNo: erdNo,
+            startId: arrow.startId,
+            endId: arrow.endId,
+          };
+          socket.send(JSON.stringify(arrowMessage));
+        }
+      });
+  
+      return remainingArrows;
+    });
+  
   }, [erdNo, socket]);
 
   // 테이블 복사
@@ -296,10 +368,9 @@ const ErdDisplay = () => {
   // 메모 추가
   const addMemo = useCallback((position) => {
     const newMemo = {
-      id: `memo-${memos.length + 1}`,
+      id: uuidv4(),
       position,
-      title: "Untitled",
-      text: "",
+      content: "",
     };
 
 
@@ -307,11 +378,10 @@ const ErdDisplay = () => {
       const tableMessage = {
         code: "5",
         erdNo: erdNo,
-        memoTitle: newMemo.title,
         xaxis: newMemo.position.x,
         yaxis: newMemo.position.y,
         id: newMemo.id,
-        content: newMemo.text || null
+        content: newMemo.content || null
 
       };
       socket.send(JSON.stringify(tableMessage));
@@ -339,14 +409,12 @@ const ErdDisplay = () => {
 
   // 메모 업데이트 
   const updateMemo = useCallback((id, updatedMemo) => {
-
     if (socket && socket.readyState === WebSocket.OPEN) {
       const memoMessage = {
         code: "7",
         erdNo: erdNo,
-        memoTitle: updatedMemo.title,
         id: id,
-        content: updatedMemo.text || null
+        content: updatedMemo.content || null
 
       };
       socket.send(JSON.stringify(memoMessage));
@@ -441,13 +509,30 @@ const ErdDisplay = () => {
                           ...primaryKey,
                           name: `${primaryKey.name}`,
                           isPrimary: false,
-                          isForeign: true, // Foreign Key로 설정
+                          isForeign: true, 
                         },
                       ],
                     }
                     : table
                 )
               );
+            }
+
+            const arrowMessage = {
+              code: "9",
+              erdNo: erdNo,
+              startXaxis: startTable.position.x,
+              startYaxis: startTable.position.y,
+              endXaxis: endTable.position.x,
+              endYaxis: endTable.position.y,
+              startId: selectedTable,
+              endId: id,
+            };
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify(arrowMessage));
+            } else {
+              console.error('WebSocket is not open');
             }
 
             // 화살표 추가
@@ -457,7 +542,6 @@ const ErdDisplay = () => {
             ]);
           }
         }
-
         setSelectedTable(null); // 선택 초기화
         setIsAddingArrow(false); // 화살표 추가 모드 종료
       }
@@ -514,7 +598,7 @@ const ErdDisplay = () => {
         <Canvas
           tables={tables}
           arrows={arrows}
-          viewport={viewport} 
+          viewport={viewport}
           startDrag={startDrag}
           stopDrag={stopDrag}
           onDrag={onDrag}
@@ -531,15 +615,17 @@ const ErdDisplay = () => {
               handleTableClick={handleTableClick}
             />
           ))}
-          {Array.isArray(memos) && memos.map((memo) => (
-            <Memo
-              key={memo.id}
-              memo={memo}
-              updateMemo={updateMemo}
-              deleteMemo={deleteMemo}
-              updateMemoPosition={updateMemoPosition}
-            />
-          ))}
+          {Array.isArray(memos) && memos.map((memo) => {
+            return (
+              <Memo
+                key={memo.id}
+                memo={memo}
+                updateMemo={updateMemo}
+                deleteMemo={deleteMemo}
+                updateMemoPosition={updateMemoPosition}
+              />
+            );
+          })}
           {arrows.map((arrow, index) => {
             const startTable = tables.find((table) => table.id === arrow.startId);
             const endTable = tables.find((table) => table.id === arrow.endId);

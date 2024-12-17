@@ -1,46 +1,27 @@
 import React from 'react';
 
 const Arrow = ({ startPosition, endPosition }) => {
-  // 각 테이블의 중앙 위치를 기준으로 계산
-  const startX = startPosition.x + 165;  
-  const startY = startPosition.y + 70;   
-  const endX = endPosition.x + 165;      
-  const endY = endPosition.y + 70;      
+  const startX = startPosition.x + 170;
+  const startY = startPosition.y + 65;
+  const endX = endPosition.x + 175;
+  const endY = endPosition.y + 65;
 
-  // 두 테이블 사이의 각도 계산 (화살표 회전)
-  const angle = Math.atan2(endY - startY, endX - startX);
-  const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+  // 꺾이는 지점 계산 (X축 중심에 따라 설정)
+  const bendX = (startX + endX) / 2; 
 
-
-  // 화살표 스타일
-  const arrowStyle = {
-    position: 'absolute',
-    top: startY,
-    left: startX,
-    width: length,
-    height: 2, // 화살표 두께
-    backgroundColor: 'purple',
-    transform: `rotate(${angle}rad)`,
-    transformOrigin: '0% 50%',
-  };
-
-  // 화살표 끝에 삼각형 모양을 추가
-  const arrowHeadStyle = {
-    position: 'absolute',
-    top: '50%',
-    right: '-5px', // 끝에서 약간 띄운다
-    width: 0,
-    height: 0,
-    borderLeft: '5px solid black',
-    borderTop: '3px solid transparent',
-    borderBottom: '3px solid transparent',
-    transform: 'translateY(-50%)',
-  };
+  // 경로 정의: 시작 -> 꺾이는 지점 -> 끝점
+  const pathData = `M ${startX} ${startY} L ${bendX} ${startY} L ${bendX} ${endY} L ${endX} ${endY}`;
 
   return (
-    <div style={arrowStyle}>
-      <div style={arrowHeadStyle}></div>
-    </div>
+    <svg style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}>
+      {/* 화살표 경로 */}
+      <path d={pathData} stroke="purple" strokeWidth="2" fill="none" />
+      {/* 화살표 머리 */}
+      <polygon
+        points={`${endX},${endY} ${endX - 8},${endY - 5} ${endX - 8},${endY + 5}`}
+        fill="purple"
+      />
+    </svg>
   );
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback,} from "react";
+import React, { useState, useCallback, } from "react";
 import Toolbar from "./Components/Toolbar";
 import Canvas from "./Components/Canvas";
 import Table from "./Components/Table";
@@ -10,7 +10,7 @@ import Sidebar from "./Components/Sidebar";
 const App = () => {
   const [tables, setTables] = useState([]);
   const [memos, setMemos] = useState([]);
-  const [arrows, setArrows] = useState([]); 
+  const [arrows, setArrows] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [isAddingArrow, setIsAddingArrow] = useState(false);
 
@@ -37,7 +37,7 @@ const App = () => {
   // 테이블 삭제
   const deleteTable = useCallback((id) => {
     setTables((prevTables) => prevTables.filter((table) => table.id !== id));
-    setArrows((prevArrows) => 
+    setArrows((prevArrows) =>
       prevArrows.filter((arrow) => arrow.startId !== id && arrow.endId !== id)
     );
   }, []);
@@ -81,7 +81,7 @@ const App = () => {
       )
     );
   }, []);
-  
+
 
   const updateTablePosition = useCallback((id, newPosition) => {
     setTables((prevTables) =>
@@ -89,7 +89,7 @@ const App = () => {
         table.id === id ? { ...table, position: newPosition } : table
       )
     );
-  
+
     // 화살표의 시작/끝이 이 테이블과 연결되어 있으면 화살표 위치도 업데이트
     setArrows((prevArrows) =>
       prevArrows.map((arrow) => {
@@ -103,7 +103,7 @@ const App = () => {
       })
     );
   }, []);
-  
+
 
   const updateMemoPosition = useCallback((id, newPosition) => {
     setMemos((prevMemos) =>
@@ -112,30 +112,38 @@ const App = () => {
       )
     );
   }, []);
-  
+
 
   // 화살표 추가 모드 활성화 및 테이블 클릭 처리
   const handleTableClick = useCallback(
     (id) => {
       if (!isAddingArrow) return;
-  
+
       if (!selectedTable) {
-        setSelectedTable(id);
+        setSelectedTable(id); // 시작 테이블 설정
       } else if (selectedTable !== id) {
         // 연결된 테이블 가져오기
         const startTable = tables.find((table) => table.id === selectedTable);
         const endTable = tables.find((table) => table.id === id);
-  
+
         if (startTable && endTable) {
-          // 시작 테이블에서 Primary Key 찾기
-          const primaryKey = startTable.fields.find((field) => field.isPrimary);
-  
-          if (primaryKey) {
-            // 끝 테이블에 Foreign Key 추가
-            setTables((prevTables) =>
-              prevTables.map((table) =>
-                table.id === endTable.id
-                  ? {
+          // 이미 연결된 화살표가 있는지 확인
+          const arrowExists = arrows.some(
+            (arrow) =>
+              (arrow.startId === selectedTable && arrow.endId === id) ||
+              (arrow.startId === id && arrow.endId === selectedTable)
+          );
+
+          if (!arrowExists) {
+            // 시작 테이블에서 Primary Key 찾기
+            const primaryKey = startTable.fields.find((field) => field.isPrimary);
+
+            if (primaryKey) {
+              // 끝 테이블에 Foreign Key 추가
+              setTables((prevTables) =>
+                prevTables.map((table) =>
+                  table.id === endTable.id
+                    ? {
                       ...table,
                       fields: [
                         ...table.fields,
@@ -147,75 +155,74 @@ const App = () => {
                         },
                       ],
                     }
-                  : table
-              )
-            );
+                    : table
+                )
+              );
+            }
+
+            // 화살표 추가
+            setArrows((prevArrows) => [
+              ...prevArrows,
+              { startId: selectedTable, endId: id },
+            ]);
           }
-  
-          // 화살표 추가
-          setArrows((prevArrows) => [
-            ...prevArrows,
-            { startId: selectedTable, endId: id },
-          ]);
         }
-  
+
         setSelectedTable(null); // 선택 초기화
         setIsAddingArrow(false); // 화살표 추가 모드 종료
       }
     },
-    [isAddingArrow, selectedTable, tables]
+    [isAddingArrow, selectedTable, tables, arrows]
   );
-  
 
   return (
-      <div className="app-container">
-        <div className="content">
-          <Toolbar
-            onAddTable={addTable}
-            onAddMemo={addMemo}
-            onAddArrow={() => setIsAddingArrow(true)}  // 화살표 추가 모드 활성화
-          />
-          <Canvas tables={tables} arrows={arrows}>
-            {tables.map((table) => (
-              <Table
-                key={table.id}
-                table={table}
-                updatePosition={updateTablePosition}
-                updateTable={updateTable}
-                deleteTable={deleteTable}
-                copyTable={copyTable}
-                handleTableClick={handleTableClick}
-              />
-            ))}
-            {memos.map((memo) => (
-              <Memo
-                key={memo.id}
-                memo={memo}
-                updateMemo={updateMemo}
-                deleteMemo={deleteMemo}
-                updateMemoPosition={updateMemoPosition}
-              />
-            ))}
-            {arrows.map((arrow, index) => {
-              const startTable = tables.find((table) => table.id === arrow.startId);
-              const endTable = tables.find((table) => table.id === arrow.endId);
+    <div className="app-container">
+      <div className="content">
+        <Toolbar
+          onAddTable={addTable}
+          onAddMemo={addMemo}
+          onAddArrow={() => setIsAddingArrow(true)}  // 화살표 추가 모드 활성화
+        />
+        <Canvas tables={tables} arrows={arrows}>
+          {tables.map((table) => (
+            <Table
+              key={table.id}
+              table={table}
+              updatePosition={updateTablePosition}
+              updateTable={updateTable}
+              deleteTable={deleteTable}
+              copyTable={copyTable}
+              handleTableClick={handleTableClick}
+            />
+          ))}
+          {memos.map((memo) => (
+            <Memo
+              key={memo.id}
+              memo={memo}
+              updateMemo={updateMemo}
+              deleteMemo={deleteMemo}
+              updateMemoPosition={updateMemoPosition}
+            />
+          ))}
+          {arrows.map((arrow, index) => {
+            const startTable = tables.find((table) => table.id === arrow.startId);
+            const endTable = tables.find((table) => table.id === arrow.endId);
 
-              if (startTable && endTable) {
-                return (
-                  <Arrow
-                    key={index}
-                    startPosition={startTable.position}
-                    endPosition={endTable.position}
-                  />
-                );
-              }
-
-              return null;
-            })}
-          </Canvas>
-          <Sidebar />
-        </div>
+            if (startTable && endTable) {
+              return (
+                <Arrow
+                  key={index}
+                  startPosition={startTable.position}
+                  endPosition={endTable.position}
+                />
+              );
+            }
+            return null;
+          })}
+        </Canvas>
+        <Sidebar />
       </div>
+    </div>
   );
 };
 
