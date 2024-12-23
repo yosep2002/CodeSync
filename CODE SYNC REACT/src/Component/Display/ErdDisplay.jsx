@@ -13,6 +13,7 @@ import History from "../Erd/History";
 import '../../Erd.css';
 import axios from "axios";
 import { v4 as uuidv4 } from 'uuid';
+import { useSelector } from "react-redux";
 
 const ErdDisplay = () => {
   const [tables, setTables] = useState([]);
@@ -28,11 +29,10 @@ const ErdDisplay = () => {
   const openModal = (modalType) => setActiveModal(modalType);
   const closeModal = () => setActiveModal(null);
   const { erdNo } = useParams();
-  const [socket, setSocket] = useState(null);  // WebSocket 연결 상태
+  const [socket, setSocket] = useState(null);
   const [userId, setUserId] = useState(null);
-  const location = useLocation();
-  const queryParams = new URLSearchParams(location.search);
-  const userNo = queryParams.get('userNo');
+  const user = useSelector((state) => state.user);
+  const userNo = user.user.userNo;
 
   // 사용자 ID를 가져오는 함수
   async function getUserId() {
@@ -52,7 +52,6 @@ const ErdDisplay = () => {
       if (response.data && Array.isArray(response.data)) {
         const transformedTables = response.data.map((item) => ({
           id: item.id || "null",
-          erdTableNo: item.erdtableNo,
           name: item.tableName || "Untitled",
           position: {
             x: parseFloat(item.xaxis) || 0,
@@ -94,25 +93,25 @@ const ErdDisplay = () => {
   const fetchArrows = useCallback(async () => {
     try {
       const response = await axios.get(`http://localhost:9090/erd/arrows?erdNo=${erdNo}`);
-      
+
       if (response.data && Array.isArray(response.data)) {
         const transformedArrows = response.data.map((item) => ({
           startId: item.startId,
           endId: item.endId,
           startPosition: {
-            x: parseFloat(item.startXaxis), 
+            x: parseFloat(item.startXaxis),
             y: parseFloat(item.startYaxis),
           },
           endPosition: {
-            x: parseFloat(item.endXaxis), 
-            y: parseFloat(item.endYaxis), 
+            x: parseFloat(item.endXaxis),
+            y: parseFloat(item.endYaxis),
           },
         }));
         setArrows(transformedArrows);
       }
     } catch (error) {
       console.error('Error fetching arrows:', error);
-      setArrows([]); 
+      setArrows([]);
     }
   }, [erdNo]);
 
@@ -147,6 +146,7 @@ const ErdDisplay = () => {
                   x: parseFloat(message.xaxis),
                   y: parseFloat(message.yaxis),
                 },
+
                 fields: [],
               },
             ]);
@@ -240,10 +240,20 @@ const ErdDisplay = () => {
                   x: parseFloat(message.endXaxis),
                   y: parseFloat(message.endYaxis),
                 },
-                startId: message.startId, 
-                endId: message.endId, 
+                startId: message.startId,
+                endId: message.endId,
               },
             ]);
+            break;
+
+          case "11": // 테이블 업데이트
+            setTables((prevTables) =>
+              prevTables.map((table) =>
+                table.id === message.id
+                  ? { ...table, name: message.tableName }
+                  : table
+              )
+            );
             break;
 
           default:
@@ -290,48 +300,91 @@ const ErdDisplay = () => {
   }, [erdNo, socket, tables, userNo]);
 
   // 테이블 업데이트
-  const updateTable = useCallback((id, updatedTable) => {
+  const updateTable = useCallback((id, updatedTable, operationType, fieldId = null) => {
     setTables((prevTables) =>
       prevTables.map((table) => (table.id === id ? updatedTable : table))
     );
-  
+    console.log(updatedTable);
+
     if (socket && socket.readyState === WebSocket.OPEN) {
       const updateMessage = {
-        code: "11", 
+        code: "11",
         erdNo: erdNo,
+        id: updatedTable.id,
         userNo: userNo,
         tableName: updatedTable.name,
-        fields: updatedTable.fields, 
       };
+
+      const targetField = fieldId
+        ? updatedTable.fields.find((field) => field.fieldId === fieldId)
+        : null;
+      console.log(targetField);
+
+      const newFields = {
+        code: null,
+        userNo: userNo,
+        id: updatedTable.id,
+        fieldId: targetField?.fieldId || null,
+        isPrimary: targetField?.isPrimary || null,
+        domain: targetField?.domain || null,
+        field: targetField?.name || null,
+        type: targetField?.type || null,
+      };
+
+      // 작업 유형 처리
+      switch (operationType) {
+        case "add":
+          newFields.code = "12";
+          break;
+
+        case "delete":
+          newFields.code = "13";
+          break;
+
+        case "edit":
+          newFields.code = "14";
+          break;
+
+        default:
+          console.error("Invalid operation type");
+          return;
+      }
+
       socket.send(JSON.stringify(updateMessage));
+      socket.send(JSON.stringify(newFields));
     } else {
-      console.error('WebSocket is not open');
+      console.error("WebSocket is not open");
     }
   }, [erdNo, socket, userNo]);
 
+
+
   // 테이블 삭제
   const deleteTable = useCallback((id) => {
+
+    const table = tables.find((table) => table.id === id);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       const tableMessage = {
         code: "3",
         erdNo: erdNo,
-        id: id
+        id: id,
       };
       socket.send(JSON.stringify(tableMessage));
     } else {
       console.error('WebSocket is not open');
     }
 
+    // 화살표 상태 업데이트
     setArrows((prevArrows) => {
       const remainingArrows = prevArrows.filter(
         (arrow) => arrow.startId !== id && arrow.endId !== id
       );
-  
+
       prevArrows.forEach((arrow) => {
         if (arrow.startId === id || arrow.endId === id) {
           const arrowMessage = {
-            code: "10",         
+            code: "10",
             erdNo: erdNo,
             startId: arrow.startId,
             endId: arrow.endId,
@@ -339,11 +392,10 @@ const ErdDisplay = () => {
           socket.send(JSON.stringify(arrowMessage));
         }
       });
-  
+
       return remainingArrows;
     });
-  
-  }, [erdNo, socket]);
+  }, [erdNo, socket, tables]);
 
   // 테이블 복사
   const copyTable = useCallback((table) => {
@@ -509,7 +561,7 @@ const ErdDisplay = () => {
                           ...primaryKey,
                           name: `${primaryKey.name}`,
                           isPrimary: false,
-                          isForeign: true, 
+                          isForeign: true,
                         },
                       ],
                     }
@@ -613,6 +665,8 @@ const ErdDisplay = () => {
               deleteTable={deleteTable}
               copyTable={copyTable}
               handleTableClick={handleTableClick}
+              id={table.id}
+              socket={socket}
             />
           ))}
           {Array.isArray(memos) && memos.map((memo) => {

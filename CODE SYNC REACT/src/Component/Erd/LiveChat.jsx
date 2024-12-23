@@ -1,5 +1,6 @@
 import axios from 'axios';
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { useLocation, useParams } from 'react-router-dom';
 import styled from 'styled-components';
 
@@ -76,9 +77,8 @@ const LiveChat = () => {
   const [inputValue, setInputValue] = useState('');  // 입력값 상태
   const [socket, setSocket] = useState(null);  // WebSocket 연결 상태
   const [userId, setUserId] = useState(null);
-
-  const queryParams = new URLSearchParams(location.search);
-  const userNo = queryParams.get('userNo');
+  const user = useSelector((state) => state.user);
+  const userNo = user.user.userNo;
 
   // 사용자 ID를 가져오는 함수
   async function getUserId() {
