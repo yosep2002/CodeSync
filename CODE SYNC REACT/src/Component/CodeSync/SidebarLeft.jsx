@@ -34,6 +34,22 @@ const Button = styled.button`
   }
 `;
 
+const RedButton = styled.button`
+  margin-bottom: 10px;
+  padding: 5px 10px;
+   background-color: #f44336;
+  color: white;
+  border: none;
+  cursor: pointer;
+
+
+  &:hover {
+    background-color: #d32f2f;
+  }
+
+
+`;
+
 const Text = styled.div`
   font-size: 16px;
   color: #777;
@@ -50,7 +66,7 @@ const Resizer = styled.div`
   cursor: ew-resize;
 `;
 
-const SidebarLeft = ({ onFileContentChange , data }) => {
+const SidebarLeft = ({ onFileContentChange, data, socket }) => {
   const { codeSyncNo } = useParams();
   const [folderTree, setFolderTree] = useState(null);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
@@ -60,75 +76,58 @@ const SidebarLeft = ({ onFileContentChange , data }) => {
 
   const [contextMenu, setContextMenu] = useState(null);
   const [contextMenuItems, setContextMenuItems] = useState([]);
-  const [socket, setSocket] = useState(null);  // 웹소켓 연결 객체
-  const [lockStatusMap, setLockStatusMap] = useState(new Map());  // 파일 잠금 상태 관리
+  const [lockStatusMap, setLockStatusMap] = useState(new Map());
   const userNo = data.user.userNo;
 
-  // WebSocket 연결을 설정하는 함수
-  // WebSocket 연결 설정
-  const connectWebSocket = () => {
-    if (socket) {
-      socket.close(); // 기존 연결이 있다면 닫기
-    }
-
-    const ws = new WebSocket(`ws://localhost:9090/codeSync.do?codeSyncNo=${codeSyncNo}`);
-    
-    ws.onopen = () => {
-      console.log("WebSocket Connected");
-      setSocket(ws);
-    };
-
-    ws.onmessage = async (event) => {
-      console.log("Received message:", event.data);
-      const message = JSON.parse(event.data);
-    
-      // 'status'가 'update'인 경우만 처리
-      if (message.status === "update") {
-        const filePath = message.file.filePath;
-        const locked = message.file.lockedBy !== 0;
-    
-        console.log(`Lock status update for ${filePath}: ${locked ? 'Locked' : 'Unlocked'}`);
-    
-        // 상태 업데이트
-        setLockStatusMap(prevState => {
-          const newMap = new Map(prevState);
-          newMap.set(filePath, locked);
-          return newMap;
-        });
-    
-        // 잠금 상태가 변경된 후 폴더 구조를 다시 가져옵니다.
-        fetchFolderStructureFromDB(codeSyncNo);  // 폴더 구조를 새로 불러오기
-      }
-    };
-    ws.onclose = () => {
-      console.log("WebSocket Disconnected");
-      setTimeout(connectWebSocket, 3000);  // 재연결 시도
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket Error:", error);
-      ws.close();
-    };
-  };
-
   useEffect(() => {
-    if (codeSyncNo) {
-      connectWebSocket();  // WebSocket 연결 시도
+    if (socket) {
+      socket.onmessage = async (event) => {
+        const message = JSON.parse(event.data);
+  
+        if (message.status === "update" || message.status === "success" || message.status === "checked") {
+          const filePath = message.file.filePath;
+          const locked = message.status === "update" ? message.file.lockedBy !== 0 : false; // 잠금 상태 확인
+  
+          console.log(message);
+          console.log(`Lock status update for ${filePath}: ${locked ? 'Locked' : 'Unlocked'}`);
+  
+          // 상태 업데이트
+          setLockStatusMap((prevState) => {
+            const newMap = new Map(prevState);
+            newMap.set(filePath, locked);
+            return newMap;
+          });
+  
+          // 폴더 구조를 다시 가져옵니다.
+          console.log('Fetching folder structure...');
+          fetchFolderStructureFromDB(codeSyncNo);
+        }
+      };
+  
+      socket.onclose = () => {
+        console.log("WebSocket Disconnected");
+      };
+  
+      socket.onerror = (error) => {
+        console.error("WebSocket Error:", error);
+      };
     }
-    
+  
     return () => {
       if (socket) {
-        socket.close();  // 컴포넌트 언마운트 시 WebSocket 연결 종료
+        socket.onmessage = null;
+        socket.onclose = null;
+        socket.onerror = null;
       }
     };
-  }, [codeSyncNo]);
+  }, [socket, codeSyncNo]);
+  
 
   useEffect(() => {
     if (codeSyncNo) {
       fetchFolderStructureFromDB(codeSyncNo);
     }
   }, [codeSyncNo]);
-
 
   const fetchFolderStructureFromDB = async (codeSyncNo) => {
     setIsLoading(true);
@@ -382,11 +381,11 @@ const SidebarLeft = ({ onFileContentChange , data }) => {
       return newExpanded;
     });
   };
-
-    const handleFileClick = async (file) => {
+  const handleFileDoubleClick = async (file) => {
     const { path } = file;
-    
+
     try {
+      // 1. 파일 번호를 가져오기 위해 서버에 요청
       const response = await axios.post('http://localhost:9090/api/codeSync/getFileNo', {
         folderNo: file.folderNo,
         fileName: file.name,
@@ -395,27 +394,34 @@ const SidebarLeft = ({ onFileContentChange , data }) => {
       const fileNo = response.data;
       if (fileNo) {
         console.log('Retrieved fileNo:', fileNo);
-        const lockedBy = userNo;
 
-        
-
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          const message = {
-            code: "3",  // 잠금 요청을 위한 코드
-            codeSyncNo,
-            fileNo,
-            lockedBy,
-            filePath: file.path,  // 파일 경로 추가
-          };
-          socket.send(JSON.stringify(message));  // 잠금 요청 전송
-        } else {
-          console.warn("WebSocket is not open. Unable to send lock request.");
-        }
-
-        onFileContentChange({
-          content: file.content,
+        // 2. 파일 잠금 상태 확인을 위한 요청
+        const lockResponse = await axios.post('http://localhost:9090/api/codeSync/checkFileLockStatus', {
           fileNo: fileNo,
+          userNo: userNo
         });
+
+        const isLockedByAnotherUser = lockResponse.data.isLockedByAnotherUser;
+        
+        if (isLockedByAnotherUser) {
+          // 3. 파일이 다른 사용자가 잠근 상태일 경우, 잠금 요청을 하지 않고 알림
+          alert('This file is already locked by another user.');
+        } else {
+          // 4. 파일 잠금 상태가 아니면 웹소켓을 통해 잠금 요청
+          const lockedBy = userNo;
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            const message = {
+              code: "3",  // 잠금 요청을 위한 코드
+              codeSyncNo,
+              fileNo,
+              lockedBy,
+              filePath: file.path,  // 파일 경로 추가
+            };
+            socket.send(JSON.stringify(message));  // 잠금 요청 전송
+          } else {
+            console.warn("WebSocket is not open. Unable to send lock request.");
+          }
+        }
       } else {
         alert('해당 파일 번호를 가져올 수 없습니다.');
       }
@@ -424,6 +430,23 @@ const SidebarLeft = ({ onFileContentChange , data }) => {
       alert('파일 정보를 불러오는 데 실패했습니다.');
     }
   };
+
+
+  const handleFileClick= async (file) => {
+    const response = await axios.post('http://localhost:9090/api/codeSync/getFileNo', {
+      folderNo: file.folderNo,
+      fileName: file.name,
+    });
+
+    const fileNo = response.data;
+
+    onFileContentChange({
+      content: file.content,
+      fileNo: fileNo,
+    });
+  }
+
+
 
   const handleContextMenu = (e, item) => {
     e.preventDefault();
@@ -490,6 +513,7 @@ const SidebarLeft = ({ onFileContentChange , data }) => {
             <div
               style={{ margin: "2px 0", cursor: "pointer", display: "flex", alignItems: "center" }}
               onClick={() => handleFileClick(node)}
+              onDoubleClick={() => handleFileDoubleClick(node)}
             >
               📄 {node.name}
               {isLocked && <span style={{ marginLeft: "5px", color: "red", fontSize: "16px" }}>🔒</span>}  {/* 파일에만 자물쇠 표시 */}
@@ -524,10 +548,25 @@ const SidebarLeft = ({ onFileContentChange , data }) => {
     document.addEventListener("mouseup", onMouseUp);
   };
 
+  const handleFileDeleteClick = () => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const message = {
+        code: "6",  // 잠금 요청을 위한 코드
+        codeSyncNo,
+      };
+      socket.send(JSON.stringify(message)); 
+  }else {
+    console.warn("WebSocket is not open. Unable to send lock request.");
+  }
+}
+
   return (
     <SidebarContainer width={sidebarWidth}>
       {folderTree === null && (
         <Button onClick={handleFileInputClick}>Upload Folder</Button>
+      )}
+       {folderTree != null && (
+        <RedButton onClick={handleFileDeleteClick}>Delete FolderTree</RedButton>
       )}
 
       <input

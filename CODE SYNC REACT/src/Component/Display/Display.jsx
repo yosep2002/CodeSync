@@ -14,6 +14,11 @@ import Docs from '../Docs/Docs';
 import CodeSyncMain from '../CodeSync/CodeSyncMain';
 import ErdDisplay from './ErdDisplay';
 import axios from 'axios';
+import UserAuthentication from '../MyPage/UserAuthentication';
+import ProjectLimit from '../Error/ProjectLimit';
+import InvalidProject from '../Error/InvalidProject';
+import GanttChart from '../Gantt/GanttChart';
+
 
 const DisplayWrapper = styled.div`
   margin: auto;
@@ -74,9 +79,19 @@ const Display = () => {
           />
           <Route path="/expiredPage" element={<ExpiredPage />} />
           <Route path="/alreadyJoined" element={<AlreadyJoined />} />
+          <Route path="/projectLimit" element={<ProjectLimit />} />
+          <Route path="/invalidProject" element={<InvalidProject />} />
           <Route path="/erd/:erdNo" element={<ErdDisplay />} />
-          <Route path="/codeSync/:codeNo" element={<CodeSyncMain />} />
-          <Route path="/docs/:wrapperNo" element={<Docs />} />
+          <Route path='/codeSync/:codeSyncNo' element={<CodeSyncMain data={user}/>}/>
+          {/* <Route path='/ganttChart/:ganttNo' elements={<GanttChart/>}></Route> */}
+          <Route 
+            path="/docs/:wrapperNo"
+            element={
+              <ProtectedRoute>
+                <Docs />
+              </ProtectedRoute>
+            } />
+          <Route path="/user-auth" element={<UserAuthentication />} />
         </Routes>
       </Body>
       <Footer />

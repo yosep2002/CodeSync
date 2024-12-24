@@ -304,7 +304,6 @@ const ErdDisplay = () => {
     setTables((prevTables) =>
       prevTables.map((table) => (table.id === id ? updatedTable : table))
     );
-    console.log(updatedTable);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       const updateMessage = {
@@ -318,7 +317,6 @@ const ErdDisplay = () => {
       const targetField = fieldId
         ? updatedTable.fields.find((field) => field.fieldId === fieldId)
         : null;
-      console.log(targetField);
 
       const newFields = {
         code: null,
@@ -330,6 +328,14 @@ const ErdDisplay = () => {
         field: targetField?.name || null,
         type: targetField?.type || null,
       };
+
+      if (newFields.isPrimary === true) {
+        newFields.isPrimary = 1;
+      } else if (newFields.isPrimary === false) {
+        newFields.isPrimary = 0;
+      } else if (newFields.isForeign === true) {
+        newFields.isPrimary = 2;
+      }
 
       // 작업 유형 처리
       switch (operationType) {
@@ -345,8 +351,10 @@ const ErdDisplay = () => {
           newFields.code = "14";
           break;
 
+        case "deletePrimary":
+          newFields.code = "15";
+          break;
         default:
-          console.error("Invalid operation type");
           return;
       }
 
@@ -356,8 +364,6 @@ const ErdDisplay = () => {
       console.error("WebSocket is not open");
     }
   }, [erdNo, socket, userNo]);
-
-
 
   // 테이블 삭제
   const deleteTable = useCallback((id) => {
@@ -523,7 +529,6 @@ const ErdDisplay = () => {
 
   }, [erdNo, socket]);
 
-
   // 화살표 추가 모드 활성화 및 테이블 클릭 처리
   const handleTableClick = useCallback(
     (id) => {
@@ -532,12 +537,10 @@ const ErdDisplay = () => {
       if (!selectedTable) {
         setSelectedTable(id); // 시작 테이블 설정
       } else if (selectedTable !== id) {
-        // 연결된 테이블 가져오기
         const startTable = tables.find((table) => table.id === selectedTable);
         const endTable = tables.find((table) => table.id === id);
 
         if (startTable && endTable) {
-          // 이미 연결된 화살표가 있는지 확인
           const arrowExists = arrows.some(
             (arrow) =>
               (arrow.startId === selectedTable && arrow.endId === id) ||
@@ -549,27 +552,44 @@ const ErdDisplay = () => {
             const primaryKey = startTable.fields.find((field) => field.isPrimary);
 
             if (primaryKey) {
-              // 끝 테이블에 Foreign Key 추가
+              // 외래 키 필드 생성
+              const newField = {
+                ...primaryKey,
+                isPrimary: false,
+                isForeign: true,  // 외래 키 표시
+              };
+
               setTables((prevTables) =>
                 prevTables.map((table) =>
                   table.id === endTable.id
                     ? {
                       ...table,
-                      fields: [
-                        ...table.fields,
-                        {
-                          ...primaryKey,
-                          name: `${primaryKey.name}`,
-                          isPrimary: false,
-                          isForeign: true,
-                        },
-                      ],
+                      fields: [...table.fields, newField],
                     }
                     : table
                 )
               );
+
+              // WebSocket을 통한 외래 키 데이터 전송
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                const foreignKeyField = {
+                  code: "12",
+                  userNo: userNo,
+                  id: endTable.id,
+                  fieldId: newField.fieldId,
+                  isPrimary: 2,
+                  isForeign: true,
+                  field: newField.name,
+                  type: newField.type,
+                  domain: newField.domain || "N/A",
+                };
+                socket.send(JSON.stringify(foreignKeyField));
+              } else {
+                console.error("WebSocket is not open");
+              }
             }
 
+            // 화살표 메시지
             const arrowMessage = {
               code: "9",
               erdNo: erdNo,
@@ -581,10 +601,11 @@ const ErdDisplay = () => {
               endId: id,
             };
 
+            // WebSocket을 통한 화살표 데이터 전송
             if (socket && socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify(arrowMessage));
             } else {
-              console.error('WebSocket is not open');
+              console.error("WebSocket is not open");
             }
 
             // 화살표 추가
@@ -594,11 +615,13 @@ const ErdDisplay = () => {
             ]);
           }
         }
-        setSelectedTable(null); // 선택 초기화
-        setIsAddingArrow(false); // 화살표 추가 모드 종료
+
+        // 화살표 설정 종료
+        setSelectedTable(null);
+        setIsAddingArrow(false);
       }
     },
-    [isAddingArrow, selectedTable, tables, arrows]
+    [isAddingArrow, selectedTable, tables, arrows, socket, userNo, erdNo]
   );
 
   // 시점 업데이트 함수
@@ -611,12 +634,10 @@ const ErdDisplay = () => {
 
   const startDrag = (e) => {
 
-    // 캔버스 시점 이동을 시작하는 상태
     if (e.target.closest('.memo') || e.target.closest('.table')) {
-      // 자식 요소일 경우에는 캔버스 드래그 비활성화
       setIsDragging(false);
     } else {
-      setIsDragging(true);  // 캔버스 자체를 드래그할 때는 시점 이동 허용
+      setIsDragging(true);
       setStartDragPosition({ x: e.clientX, y: e.clientY });
     }
   };

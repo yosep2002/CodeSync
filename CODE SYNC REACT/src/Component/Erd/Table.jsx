@@ -30,10 +30,20 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
           fieldId: item.fieldId,
           name: item.field,
           type: item.type,
-          isPrimary: item.isPrimary || false,
+          isPrimary: item.isPrimary === "1",
+          isForeign: item.isPrimary === "2",
           domain: item.domain || "N/A",
         }));
-        setTableFields(transformedTableFields);
+
+        const sortedFields = transformedTableFields.sort((a, b) => {
+          if (a.isPrimary && !b.isPrimary) return -1; 
+          if (b.isPrimary && !a.isPrimary) return 1;  
+          if (a.isForeign && !b.isForeign) return -1; 
+          if (b.isForeign && !a.isForeign) return 1;   
+          return 0; 
+        });
+
+        setTableFields(sortedFields);
       }
     } catch (error) {
       console.error("Error fetching table fields:", error);
@@ -42,7 +52,7 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
 
   useEffect(() => {
     fetchTableFields();
-  }, [id, fetchTableFields]);
+  }, [id, handleTableClick, fetchTableFields]);
 
   // 제목 변경
   const handleTitleChange = () => setIsEditingTitle(true);
@@ -52,8 +62,7 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
   };
 
   // 필드 추가
-  const handleAddField = (isPrimary = false) => (e) => {
-    e.stopPropagation();  
+  const handleAddField = (isPrimary = false) => {
     if (isPrimary && tableFields.some((field) => field.isPrimary)) {
       return;
     }
@@ -86,21 +95,28 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
   };
 
   // 필드 삭제
-  const handleDeleteField = (fieldIndex) => (e) => {
-    e.stopPropagation();  
+  const handleDeleteField = (fieldIndex) => {
     const deletedField = tableFields[fieldIndex];
-
-    updateTable(
-      table.id,
-      { ...table, fields: tableFields }, 
-      "delete",  
-      deletedField.fieldId  
-    );
-
+  
+    if (deletedField.isPrimary) {
+      updateTable(
+        table.id,
+        { ...table, fields: tableFields },
+        "deletePrimary", 
+        deletedField.fieldId
+      );
+    } else {
+      updateTable(
+        table.id,
+        { ...table, fields: tableFields },
+        "delete",
+        deletedField.fieldId
+      );
+    }
+  
     const updatedFields = tableFields.filter((_, index) => index !== fieldIndex);
-
     setTableFields(updatedFields);
-  };
+  };  
 
   const handleFieldEdit = (fieldType, index) => {
     setEditingField(fieldType);
@@ -108,8 +124,7 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
   };
 
   // 필드 저장
-  const handleFieldSave = () => (e) => {
-    e.stopPropagation();  
+  const handleFieldSave = () => {
     if (editingFieldIndex === null) return;
 
     const updatedTable = {
@@ -139,7 +154,7 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
         updatePosition(table.id, newPosition);
       }}
     >
-      <TableWrapper ref={tableRef} onClick={() => handleTableClick(table.id)}>
+      <TableWrapper ref={tableRef} onClick={() => handleTableClick(table.id)} className="table">
         <TableHeader>
           <TableTitleWrapper>
             {isEditingTitle ? (
@@ -174,13 +189,13 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
           <tbody>
             {Array.isArray(tableFields) && tableFields.length > 0 ? (
               tableFields.map((field, index) => (
-                <tr key={field.fieldId || index}> 
-                  <TableCell isPrimary={field.isPrimary}>
-                    {field.isPrimary ? "P" : ""}
+                <tr key={field.fieldId || index}>
+                  <TableCell isPrimary={field.isPrimary} isForeign={field.isForeign}>
+                    {field.isPrimary ? "P" : field.isForeign ? "F" : ""}
                   </TableCell>
                   {["name", "domain", "type"].map((fieldType) => (
                     <TableCell
-                      key={`${field.fieldId || index}-${fieldType}`} 
+                      key={`${field.fieldId || index}-${fieldType}`}
                       onClick={() => handleFieldEdit(fieldType, index)}
                       isPrimary={field.isPrimary}
                     >
@@ -204,7 +219,7 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
               ))
             ) : (
               <tr>
-                <td colSpan="5">No fields available</td> {/* 필드가 없을 때 기본 행 */}
+                <td colSpan="5">No fields available</td>
               </tr>
             )}
           </tbody>
@@ -223,7 +238,7 @@ const TableWrapper = styled.div`
   width: 300px; /* 크기 줄임 */
   background-color: #f9f9f9;
   border: 1px solid #ccc;
-  padding: 10px; /* padding 줄임 */
+  padding: 3px; /* padding 줄임 */
   color: #333;
   display: flex;
   flex-direction: column;
