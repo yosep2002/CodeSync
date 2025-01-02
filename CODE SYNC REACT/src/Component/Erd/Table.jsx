@@ -3,13 +3,17 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import Draggable from "react-draggable";
 import styled from "styled-components";
 
-const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, handleTableClick, id }) => {
+const Table = ({ table, updatePosition, updateTable, deleteTable,
+  copyTable, id, startConnection,
+  completeConnection, isAddingArrow
+}) => {
   const tableRef = useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(table.name);
   const [editingField, setEditingField] = useState(null);
   const [editingFieldIndex, setEditingFieldIndex] = useState(null);
   const [tableFields, setTableFields] = useState([]);
+  const [isConnectionInProgress, setIsConnectionInProgress] = useState(false);
 
   const [position, setPosition] = useState(table.position || { x: 0, y: 0 });
 
@@ -18,6 +22,10 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
       setPosition(table.position);
     }
   }, [table.position]);
+
+  useEffect(() => {
+    console.log("isAddingArrow changed:", isAddingArrow); 
+  }, [isAddingArrow]);
 
   // 필드 데이터 불러오기
   const fetchTableFields = useCallback(async () => {
@@ -36,11 +44,10 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
         }));
 
         const sortedFields = transformedTableFields.sort((a, b) => {
-          if (a.isPrimary && !b.isPrimary) return -1; 
-          if (b.isPrimary && !a.isPrimary) return 1;  
-          if (a.isForeign && !b.isForeign) return -1; 
-          if (b.isForeign && !a.isForeign) return 1;   
-          return 0; 
+          if (a.isPrimary && !b.isPrimary) return -1;
+          if (b.isPrimary && !a.isPrimary) return 1;
+          if (a.isForeign && !b.isForeign) return -1;
+          if (b.isForeign && !a.isForeign) return 1;
         });
 
         setTableFields(sortedFields);
@@ -52,11 +59,11 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
 
   useEffect(() => {
     fetchTableFields();
-  }, [id, handleTableClick, fetchTableFields]);
+  }, [id, tableFields]);
 
   // 제목 변경
   const handleTitleChange = () => setIsEditingTitle(true);
-  const handleTitleSave = () => {
+  const handleTitleSave = () => { 
     updateTable(table.id, { ...table, name: title });
     setIsEditingTitle(false);
   };
@@ -97,12 +104,12 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
   // 필드 삭제
   const handleDeleteField = (fieldIndex) => {
     const deletedField = tableFields[fieldIndex];
-  
+
     if (deletedField.isPrimary) {
       updateTable(
         table.id,
         { ...table, fields: tableFields },
-        "deletePrimary", 
+        "deletePrimary",
         deletedField.fieldId
       );
     } else {
@@ -113,10 +120,11 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
         deletedField.fieldId
       );
     }
-  
+
     const updatedFields = tableFields.filter((_, index) => index !== fieldIndex);
     setTableFields(updatedFields);
-  };  
+
+  };
 
   const handleFieldEdit = (fieldType, index) => {
     setEditingField(fieldType);
@@ -144,6 +152,20 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
     setEditingFieldIndex(null);
   };
 
+  const handleConnection = (e, position) => {
+    if (!isAddingArrow) return;  // 화살표 추가 상태일 때만 실행
+  
+    if (!isConnectionInProgress) {
+      // 연결 시작
+      startConnection(table.id, position);
+      setIsConnectionInProgress(true);
+    } else {
+      // 연결 완료
+      completeConnection(table.id, position);
+      setIsConnectionInProgress(false);
+    }
+  };
+
   return (
     <Draggable
       nodeRef={tableRef}
@@ -154,76 +176,108 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
         updatePosition(table.id, newPosition);
       }}
     >
-      <TableWrapper ref={tableRef} onClick={() => handleTableClick(table.id)} className="table">
-        <TableHeader>
-          <TableTitleWrapper>
-            {isEditingTitle ? (
-              <TitleInput
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleTitleSave}
-                autoFocus
-              />
-            ) : (
-              <Title onClick={handleTitleChange}>{title}</Title>
-            )}
-          </TableTitleWrapper>
-          <TableActions>
-            <Button onClick={() => handleAddField()}>+</Button>
-            <Button onClick={() => handleAddField(true)}>P</Button>
-            <Button onClick={() => copyTable(table)}>C</Button>
-            <Button onClick={() => deleteTable(table.id)}>X</Button>
-          </TableActions>
-        </TableHeader>
-        <TableFields>
-          <thead>
-            <tr>
-              <th>Key</th>
-              <th>Field</th>
-              <th>Domain</th>
-              <th>Type</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Array.isArray(tableFields) && tableFields.length > 0 ? (
-              tableFields.map((field, index) => (
-                <tr key={field.fieldId || index}>
-                  <TableCell isPrimary={field.isPrimary} isForeign={field.isForeign}>
-                    {field.isPrimary ? "P" : field.isForeign ? "F" : ""}
-                  </TableCell>
-                  {["name", "domain", "type"].map((fieldType) => (
-                    <TableCell
-                      key={`${field.fieldId || index}-${fieldType}`}
-                      onClick={() => handleFieldEdit(fieldType, index)}
-                      isPrimary={field.isPrimary}
-                    >
-                      {editingField === fieldType && editingFieldIndex === index ? (
-                        <FieldInput
-                          type="text"
-                          value={field[fieldType]}
-                          onChange={(e) => handleFieldChange(index, fieldType, e.target.value)}
-                          onBlur={handleFieldSave}
-                          autoFocus
-                        />
-                      ) : (
-                        <span>{field[fieldType]}</span>
-                      )}
-                    </TableCell>
-                  ))}
-                  <TableCell>
-                    <FieldButton onClick={() => handleDeleteField(index)}>X</FieldButton>
-                  </TableCell>
-                </tr>
-              ))
-            ) : (
+      <TableWrapper ref={tableRef} className="table">
+        <div
+          style={{ display: isAddingArrow ? 'block' : 'none' }}
+        >
+          <TopPoint
+            onClick={(e) => {
+              e.stopPropagation();
+              const position = { x: e.clientX, y: e.clientY };
+              handleConnection(e, position);
+            }}
+          />
+          <RightPoint
+            onClick={(e) => {
+              e.stopPropagation();
+              const position = { x: e.clientX, y: e.clientY };
+              handleConnection(e, position);
+            }}
+          />
+          <BottomPoint
+            onClick={(e) => {
+              e.stopPropagation();
+              const position = { x: e.clientX, y: e.clientY };
+              handleConnection(e, position);
+            }}
+          />
+          <LeftPoint
+            onClick={(e) => {
+              e.stopPropagation();
+              const position = { x: e.clientX, y: e.clientY };
+              handleConnection(e, position);
+            }}
+          />
+          </div>
+          <TableHeader>
+            <TableTitleWrapper>
+              {isEditingTitle ? (
+                <TitleInput
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onBlur={handleTitleSave}
+                  autoFocus
+                />
+              ) : (
+                <Title onClick={handleTitleChange}>{title}</Title>
+              )}
+            </TableTitleWrapper>
+            <TableActions>
+              <Button onClick={() => handleAddField()}>+</Button>
+              <Button onClick={() => handleAddField(true)}>P</Button>
+              <Button onClick={() => copyTable(table)}>C</Button>
+              <Button onClick={() => deleteTable(table.id)}>X</Button>
+            </TableActions>
+          </TableHeader>
+          <TableFields>
+            <thead>
               <tr>
-                <td colSpan="5">No fields available</td>
+                <th>Key</th>
+                <th>Field</th>
+                <th>Domain</th>
+                <th>Type</th>
+                <th>Actions</th>
               </tr>
-            )}
-          </tbody>
-        </TableFields>
+            </thead>
+            <tbody>
+              {Array.isArray(tableFields) && tableFields.length > 0 ? (
+                tableFields.map((field, index) => (
+                  <tr key={field.fieldId || index}>
+                    <TableCell isPrimary={field.isPrimary} isForeign={field.isForeign}>
+                      {field.isPrimary ? "P" : field.isForeign ? "F" : ""}
+                    </TableCell>
+                    {["name", "domain", "type"].map((fieldType) => (
+                      <TableCell
+                        key={`${field.fieldId || index}-${fieldType}`}
+                        onClick={() => handleFieldEdit(fieldType, index)}
+                        isPrimary={field.isPrimary}
+                      >
+                        {editingField === fieldType && editingFieldIndex === index ? (
+                          <FieldInput
+                            type="text"
+                            value={field[fieldType]}
+                            onChange={(e) => handleFieldChange(index, fieldType, e.target.value)}
+                            onBlur={handleFieldSave}
+                            autoFocus
+                          />
+                        ) : (
+                          <span>{field[fieldType]}</span>
+                        )}
+                      </TableCell>
+                    ))}
+                    <TableCell>
+                      <FieldButton onClick={() => handleDeleteField(index)}>X</FieldButton>
+                    </TableCell>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5">No fields available</td>
+                </tr>
+              )}
+            </tbody>
+          </TableFields>
       </TableWrapper>
     </Draggable>
   );
@@ -231,6 +285,41 @@ const Table = ({ table, updatePosition, updateTable, deleteTable, copyTable, han
 
 export default Table;
 
+const ConnectionPoint = styled.div`
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background-color: gray;
+  border-radius: 50%;
+  cursor: pointer;
+  &:hover {
+    background-color: darkred;
+  }
+`;
+
+const TopPoint = styled(ConnectionPoint)`
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+`;
+
+const RightPoint = styled(ConnectionPoint)`
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%);
+`;
+
+const BottomPoint = styled(ConnectionPoint)`
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+`;
+
+const LeftPoint = styled(ConnectionPoint)`
+  top: 50%;
+  left: -5px;
+  transform: translateY(-50%);
+`;
 
 const TableWrapper = styled.div`
 
@@ -238,7 +327,7 @@ const TableWrapper = styled.div`
   width: 300px; /* 크기 줄임 */
   background-color: #f9f9f9;
   border: 1px solid #ccc;
-  padding: 3px; /* padding 줄임 */
+  padding: 10px; /* padding 줄임 */
   color: #333;
   display: flex;
   flex-direction: column;
@@ -249,7 +338,7 @@ const TableWrapper = styled.div`
   cursor: grab;
   height: auto; 
   z-index: 10; /* 테이블을 화살표 위로 올리기 */
-  overflow: hidden; /* 겹친 부분 숨기기 */
+  overflow: visible; /* 겹친 부분 숨기기 */
 `;
 
 const TableHeader = styled.div`

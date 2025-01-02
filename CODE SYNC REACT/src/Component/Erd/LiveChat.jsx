@@ -21,6 +21,8 @@ const ChatMessage = styled.div`
   display: flex;
   justify-content: ${(props) => (props.isUser ? 'flex-end' : 'flex-start')};
   margin: 5px 0;
+  flex-direction: column; /* 상하 배치 */
+  align-items: ${(props) => (props.isUser ? 'flex-end' : 'flex-start')};
 `;
 
 const MessageBubble = styled.div`
@@ -187,8 +189,8 @@ const LiveChat = () => {
               {!msg.isUser && <UserId isUser={msg.isUser}>{msg.userId}:</UserId>}
               <span>{msg.content}</span>
             </MessageBubble>
-            {/* 메시지 하단에 타임스탬프 표시 */}
-            <span style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
+            {/* 메시지 하단에 타임스탬프 표시 - 상하로 배치 */}
+            <span style={{ fontSize: '10px', color: '#888', marginTop: '5px' }}>
               {new Date(msg.chatTime).toLocaleTimeString()}
             </span>
           </ChatMessage>
