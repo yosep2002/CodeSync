@@ -241,8 +241,6 @@ const Main = ({ projects, fetchProjects }) => {
                 muserNo: user.user.userNo || ''
             }));
     
-            console.log("로그인된 유저 데이터: " + JSON.stringify(user, null, 2));
-    
             fetchProjects(user?.user?.userNo);
     
             const fetchAllUsers = async () => {
@@ -259,11 +257,15 @@ const Main = ({ projects, fetchProjects }) => {
             fetchAllUsers();
         } else {
             setAllUsers([]);
-            console.log("로그아웃 상태: 프로젝트 목록 초기화");
         }
     }, [isAuthenticated, user]);
 
     const handleChange = (e) => {
+      const { name, value } = e.target;
+      setProjectInfo({
+          ...projectInfo,
+          [name]: value,
+      });
 
       if (name === "projectName" && value.replace(/[^\uAC00-\uD7A3]/g, "").length > 10) {
           alert("프로젝트 이름은 한글 10자까지 입력할 수 있습니다.");
@@ -273,11 +275,6 @@ const Main = ({ projects, fetchProjects }) => {
           alert("프로젝트 설명은 한글 30자까지 입력할 수 있습니다.");
           return;
       }
-        const { name, value } = e.target;
-        setProjectInfo({
-            ...projectInfo,
-            [name]: value,
-        });
     };
 
     const handleOpenProjectModal = () => {
@@ -371,7 +368,6 @@ const Main = ({ projects, fetchProjects }) => {
                     'Content-Type': 'application/json',
                 },
             });
-            console.log('프로젝트 생성 성공');
     
             fetchProjects(user?.user?.userNo);
     
@@ -453,6 +449,14 @@ const Main = ({ projects, fetchProjects }) => {
           const wrapperNo = response.data.wrapperNo;
           navigate(`/docs/${wrapperNo}`);
       };
+
+      const handleMoveToGantt = async (projectNo) => {
+        navigate(`/gantt/${projectNo}`);
+      }
+
+      const handleMoveToSkills = async (projectNo) => {
+        navigate(`/skills/${projectNo}`);
+      }
 
     const deleteProject = async (projectNo) => {
         // eslint-disable-next-line no-restricted-globals
@@ -551,6 +555,12 @@ const Main = ({ projects, fetchProjects }) => {
             </TooltipItem>
             <TooltipItem onClick={() => handleMoveToDocs(project.projectNo)}>
                 문서 확인
+            </TooltipItem>
+            <TooltipItem onClick={() => handleMoveToGantt(project.projectNo)}>
+                Gantt Chart
+            </TooltipItem>
+            <TooltipItem onClick={() => handleMoveToSkills(project.projectNo)}>
+                기술 스택
             </TooltipItem>
             <span onClick={(e) => {
                 e.stopPropagation();
@@ -651,7 +661,7 @@ const Main = ({ projects, fetchProjects }) => {
                           cursor: 'pointer',
                         }}
                         onClick={() => {
-                          navigator.clipboard.writeText("http://localhost:9090/project/"+selectedProject.token);
+                          navigator.clipboard.writeText("http://116.121.53.142:9100/project/"+selectedProject.token);
                           alert('초대 코드가 클립보드에 복사되었습니다!');
                         }}
                       >

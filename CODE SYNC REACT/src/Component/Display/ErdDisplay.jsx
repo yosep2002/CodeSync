@@ -36,7 +36,7 @@ const ErdDisplay = () => {
 
   const fetchHistory = async () => {
     try {
-      const response = await axios.get('http://localhost:9090/erd/history');
+      const response = await axios.get(`http://localhost:9090/erd/history/${erdNo}`);
       setHistory(response.data);
     } catch (error) {
       console.error('Failed to fetch history:', error);
@@ -45,10 +45,12 @@ const ErdDisplay = () => {
 
   // 히스토리 추가 함수
   const addHistory = useCallback(async (action) => {
-    const now = new Date();
+    const now = Date.now();
     const newHistory = {
+      erdNo: erdNo,
       action,
-      erdUpdateDate: now.toLocaleString(),
+      userId: user.user.userId,
+      erdUpdateDate: now, 
     };
     setHistory((prevHistory) => [newHistory, ...prevHistory]);
 
@@ -63,13 +65,12 @@ const ErdDisplay = () => {
 
   const startConnection = (tableId, position) => {
     if (!isAddingArrow || arrowStart) return;  // arrowStart가 이미 있으면 실행되지 않게
-  
+
     // 화살표 연결을 시작할 때만 state 설정
     setArrowStart({ tableId, position });
     console.log("Arrow start:", { tableId, position });
-  };  
+  };
 
-  // 화살표 연결 완료 (다른 테이블 클릭하여 연결 끝)
   const completeConnection = (tableId, position) => {
     if (!isAddingArrow || !arrowStart) return;
 
@@ -87,6 +88,7 @@ const ErdDisplay = () => {
       return;
     }
 
+    // 2. 테이블 간 화살표 연결 여부 확인 (양 방향 연결 체크)
     const isAlreadyConnected = arrows.some(
       (arrow) =>
         (arrow.startId === startTable.id && arrow.endId === endTable.id) ||
@@ -98,6 +100,7 @@ const ErdDisplay = () => {
       return;
     }
 
+    // 화살표의 상대 좌표 계산
     const relativeStartX = arrowStart.position.x - startTable.position.x;
     const relativeStartY = arrowStart.position.y - startTable.position.y;
     const relativeEndX = position.x - endTable.position.x;
@@ -289,7 +292,7 @@ const ErdDisplay = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [history]);
+  }, []);
 
   useEffect(() => {
     if (!userId || !erdNo) return;
@@ -473,11 +476,11 @@ const ErdDisplay = () => {
   // 테이블 업데이트
   const updateTable = useCallback((id, updatedTable, operationType, fieldId = null) => {
 
-    addHistory(`${userId}가 테이블을 수정하였습니다`);
-
     setTables((prevTables) =>
       prevTables.map((table) => (table.id === id ? updatedTable : table))
     );
+
+    addHistory(`${userId}가 ${updateTable.name} 테이블을 수정하였습니다`);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       const updateMessage = {
@@ -487,6 +490,7 @@ const ErdDisplay = () => {
         userNo: userNo,
         tableName: updatedTable.name,
       };
+      socket.send(JSON.stringify(updateMessage));
 
       const targetField = fieldId
         ? updatedTable.fields.find((field) => field.fieldId === fieldId)
@@ -532,7 +536,6 @@ const ErdDisplay = () => {
           return;
       }
 
-      socket.send(JSON.stringify(updateMessage));
       socket.send(JSON.stringify(newFields));
     } else {
       console.error("WebSocket is not open");
@@ -544,7 +547,7 @@ const ErdDisplay = () => {
 
     const table = tables.find((table) => table.id === id);
 
-    addHistory(`${userId}가 테이블을 삭제하였습니다`);
+    addHistory(`${userId}가 ${table.name} 테이블을 삭제하였습니다`);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       const tableMessage = {
@@ -582,7 +585,7 @@ const ErdDisplay = () => {
   // 테이블 복사
   const copyTable = useCallback((table) => {
 
-    addHistory(`${userId}가 테이블을 복사하였습니다`);
+    addHistory(`${userId}가 ${table.name} 테이블을 복사하였습니다`);
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       const tableMessage = {
@@ -833,13 +836,21 @@ const ErdDisplay = () => {
               />
             );
           })}
-          {arrows.map((arrow, index) => (
-            <Arrow
-              key={arrow.erdArrowNo || arrow.tempId || `arrow-${index}`}
-              startPosition={arrow.startPosition}
-              endPosition={arrow.endPosition}
-            />
-          ))}
+          {arrows.map((arrow, index) => {
+            const startTable = tables.find((table) => table.id === arrow.startId);
+            const endTable = tables.find((table) => table.id === arrow.endId);
+
+            if (startTable && endTable) {
+              return (
+                <Arrow
+                  key={index}
+                  startPosition={startTable.position}
+                  endPosition={endTable.position}
+                />
+              );
+            }
+            return null;
+          })}
         </Canvas>
         <Sidebar onButtonClick={openModal} />
         <SidePanel open={activeModal === "liveChat"}>
